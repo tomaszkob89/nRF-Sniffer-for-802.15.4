@@ -167,8 +167,7 @@ class Nrf802154Sniffer(object):
                         self.logger.error("Failed to stop thread {}".format(thread.name))
                         alive_threads.append(thread)
                 except RuntimeError:
-                    # TODO: This may be called from one of threads from thread list - architecture problem
-                    pass
+                    self.logger.error("Exception: ", exc_info=True)
 
             self.threads = alive_threads
         else:
@@ -325,7 +324,7 @@ class Nrf802154Sniffer(object):
             self.serial.write(command + b'\r\n')
             self.serial.write(b'\r\n')
         except IOError:
-            self.logger.error("Cannot write to {}".format(self))
+            self.logger.error("Cannot write to {}".format(self), exc_info=True)
             self.running.clear()
 
     def serial_writer(self):
@@ -409,7 +408,7 @@ class Nrf802154Sniffer(object):
                     buf = b''
 
         except (serialutil.SerialException, serialutil.SerialTimeoutException) as e:
-            self.logger.error("Cannot communicate with serial device: {} reason: {}".format(dev, e))
+            self.logger.error("Cannot communicate with serial device: {} reason: {}".format(dev, e), exc_info=True)
         finally:
             self.setup_done.set()  # In case it wasn't set before.
             if self.running.is_set():  # Another precaution.
@@ -470,6 +469,8 @@ class Nrf802154Sniffer(object):
             thread.start()
 
         while is_standalone and self.running.is_set():
+            for t in self.threads:
+                self.logger.info(f"{t.name} alive: {t.is_alive()}")
             time.sleep(1)
 
     @staticmethod
