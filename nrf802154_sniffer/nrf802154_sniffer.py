@@ -1,5 +1,7 @@
 #!/usr/bin/env python
-
+import multiprocessing
+import shlex
+import subprocess
 # Copyright (c) 2019, Nordic Semiconductor ASA
 # All rights reserved.
 #
@@ -60,6 +62,17 @@ from argparse import ArgumentParser
 from binascii import a2b_hex
 from serial import Serial, serialutil
 from serial.tools.list_ports import comports
+
+
+def exec_cmd(cmd):
+    return os.popen(cmd).read()
+
+def get_dmesg():
+    return exec_cmd("sudo dmesg | tail -40")
+
+def get_fd():
+    pid = multiprocessing.current_process().pid
+    return exec_cmd(f"lsof -p {pid}")
 
 
 class Nrf802154Sniffer(object):
@@ -169,6 +182,7 @@ class Nrf802154Sniffer(object):
                             alive_threads.append(thread)
                 except RuntimeError:
                     self.logger.error("Exception: ", exc_info=True)
+                    self.logger.error(f"DMESG: {get_dmesg()}")
 
             self.threads = alive_threads
         else:
@@ -323,13 +337,14 @@ class Nrf802154Sniffer(object):
         """
         command = self.serial_queue.get(block=True, timeout=1)
         try:
-            if not self.serial.is_open:
-                self.logger.error("Reopening Serial")
-                self.serial.open()
+            # if not self.serial.is_open:
+            #     self.logger.error("Reopening Serial")
+            #     self.serial.open()
             self.serial.write(command + b'\r\n')
             self.serial.write(b'\r\n')
         except IOError:
             self.logger.error("Cannot write to {}".format(self), exc_info=True)
+            self.logger.error(f"DMESG: {get_dmesg()}")
             self.running.clear()
 
     def serial_writer(self):
@@ -384,6 +399,7 @@ class Nrf802154Sniffer(object):
             init_res = self.serial.read(len(b"".join(c + b"\r\n\r\n" for c in init_cmd)))
 
             if not all(cmd.decode() in init_res.decode() for cmd in init_cmd):
+                self.logger.error(f"DMESG: {get_dmesg()}")
                 self.logger.error(f"Init res: {init_res.decode()}")
                 msg = "{} did not reply properly to setup commands. Please re-plug the device and make sure firmware is correct. " \
                         "Recieved: {}\n".format(self, init_res)
@@ -392,15 +408,16 @@ class Nrf802154Sniffer(object):
                     self.serial.close()
                 self.logger.error(msg, exc_info=True)
 
+
             self.serial_queue.put(b'receive')
             self.setup_done.set()
 
             buf = b''
 
             while self.running.is_set():
-                if not self.serial.is_open:
-                    self.logger.error("Reopening Serial")
-                    self.serial.open()
+                # if not self.serial.is_open:
+                #     self.logger.error("Reopening Serial")
+                #     self.serial.open()
                 ch = self.serial.read()
                 if ch == b'':
                     continue
@@ -419,6 +436,7 @@ class Nrf802154Sniffer(object):
 
         except (serialutil.SerialException, serialutil.SerialTimeoutException) as e:
             self.logger.error("Cannot communicate with serial device: {} reason: {}".format(dev, e), exc_info=True)
+            self.logger.error(f"DMESG: {get_dmesg()}")
         finally:
             self.setup_done.set()  # In case it wasn't set before.
             if self.running.is_set():  # Another precaution.
