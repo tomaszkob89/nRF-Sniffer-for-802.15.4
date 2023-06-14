@@ -176,6 +176,7 @@ class Nrf802154Sniffer(object):
 
         if self.serial is not None:
             if self.serial.is_open is True:
+                self.logger.error("Closing Serial in stop sig handler")
                 self.serial.close()
             self.serial = None
 
@@ -322,6 +323,9 @@ class Nrf802154Sniffer(object):
         """
         command = self.serial_queue.get(block=True, timeout=1)
         try:
+            if not self.serial.is_open:
+                self.logger.error("Reopening Serial")
+                self.serial.open()
             self.serial.write(command + b'\r\n')
             self.serial.write(b'\r\n')
         except IOError:
@@ -384,6 +388,7 @@ class Nrf802154Sniffer(object):
                 msg = "{} did not reply properly to setup commands. Please re-plug the device and make sure firmware is correct. " \
                         "Recieved: {}\n".format(self, init_res)
                 if self.serial.is_open is True:
+                    self.logger.error("Closing Serial")
                     self.serial.close()
                 self.logger.error(msg, exc_info=True)
 
