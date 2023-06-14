@@ -398,6 +398,9 @@ class Nrf802154Sniffer(object):
             buf = b''
 
             while self.running.is_set():
+                if not self.serial.is_open:
+                    self.logger.error("Reopening Serial")
+                    self.serial.open()
                 ch = self.serial.read()
                 if ch == b'':
                     continue
