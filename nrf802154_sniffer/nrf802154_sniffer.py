@@ -162,10 +162,11 @@ class Nrf802154Sniffer(object):
 
             for thread in self.threads:
                 try:
-                    thread.join(timeout=10)
-                    if thread.is_alive() is True:
-                        self.logger.error("Failed to stop thread {}".format(thread.name))
-                        alive_threads.append(thread)
+                    if not thread.name == threading.current_thread().name:
+                        thread.join(timeout=10)
+                        if thread.is_alive() is True:
+                            self.logger.error("Failed to stop thread {}".format(thread.name))
+                            alive_threads.append(thread)
                 except RuntimeError:
                     self.logger.error("Exception: ", exc_info=True)
 
@@ -379,11 +380,12 @@ class Nrf802154Sniffer(object):
             init_res = self.serial.read(len(b"".join(c + b"\r\n\r\n" for c in init_cmd)))
 
             if not all(cmd.decode() in init_res.decode() for cmd in init_cmd):
+                self.logger.error(f"Init res: {init_res.decode()}")
                 msg = "{} did not reply properly to setup commands. Please re-plug the device and make sure firmware is correct. " \
                         "Recieved: {}\n".format(self, init_res)
                 if self.serial.is_open is True:
                     self.serial.close()
-                raise Exception(msg)
+                self.logger.error(msg, exc_info=True)
 
             self.serial_queue.put(b'receive')
             self.setup_done.set()
