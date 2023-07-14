@@ -99,6 +99,8 @@ class Nrf802154Sniffer(object):
         self.first_local_timestamp = None
         self.first_sniffer_timestamp = None
 
+        self.log_file  = None
+
     def correct_time(self, sniffer_timestamp):
         """
         Function responsible for correcting the time reported by the sniffer.
@@ -391,22 +393,32 @@ class Nrf802154Sniffer(object):
 
             buf = b''
 
-            while self.running.is_set():
-                ch = self.serial.read()
-                if ch == b'':
-                    continue
-                elif ch != b'\n' and ch != '\n':
-                    buf += ch
-                else:
-                    m = re.search(self.RCV_REGEX, str(buf))
-                    if m:
-                        packet = a2b_hex(m.group(1)[:-4])
-                        rssi = int(m.group(2))
-                        lqi = int(m.group(3))
-                        timestamp = int(m.group(4)) & 0xffffffff
-                        channel = int(channel)
-                        queue.put(self.pcap_packet(packet, self.dlt, channel, rssi, lqi, self.correct_time(timestamp)))
-                    buf = b''
+            log_file_handler = None
+            try:
+                while self.running.is_set():
+                    ch = self.serial.read()
+                    if ch:
+                        if self.log_file and log_file_handler is None:
+                            log_file_handler = open(self.log_file, 'wb')
+                        log_file_handler.write(ch)
+
+                    if ch == b'':
+                        continue
+                    elif ch != b'\n' and ch != '\n':
+                        buf += ch
+                    else:
+                        m = re.search(self.RCV_REGEX, str(buf))
+                        if m:
+                            packet = a2b_hex(m.group(1)[:-4])
+                            rssi = int(m.group(2))
+                            lqi = int(m.group(3))
+                            timestamp = int(m.group(4)) & 0xffffffff
+                            channel = int(channel)
+                            queue.put(self.pcap_packet(packet, self.dlt, channel, rssi, lqi, self.correct_time(timestamp)))
+                        buf = b''
+            finally:
+                if log_file_handler:
+                    log_file_handler.close()
 
         except (serialutil.SerialException, serialutil.SerialTimeoutException) as e:
             self.logger.error("Cannot communicate with serial device: {} reason: {}".format(dev, e))
